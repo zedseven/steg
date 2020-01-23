@@ -1,2 +1,2 @@
 # steg
-A basic steganography library. Modtly just for practice with Go.
+A basic steganography library. Mostly just for practice with Go.
