@@ -28,6 +28,7 @@ func LoadImage(imgPath string) (pixels [][]Pixel, e error) {
 	defer imgFile.Close()
 
 	pixels, err = readPixels(imgFile)
+	//fmt.Println(pixels)
 
 	if err != nil {
 		fmt.Println("The image couldn't be decoded.", err.Error())

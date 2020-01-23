@@ -1,6 +1,7 @@
 package hide
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/zedseven/steg/imgio"
 	"os"
@@ -14,18 +15,29 @@ func Hide(imgPath, filePath string) {
 		return
 	}
 
-	r, err := os.Open(filePath)
+	buf, err := os.Open(filePath)
 
 	if err != nil {
 		fmt.Printf("Unable to open the file at '%v'. %v\n", filePath, err.Error())
 		return
 	}
 
-	b := make([]byte, 0, 32)
+	defer func() {
+		if err = buf.Close(); err != nil {
+			fmt.Println("Error closing the file", err.Error())
+		}
+	}()
+
+	fmt.Println(pixels)
+
+	r := bufio.NewReader(buf)
+	b := make([]byte, 32)
 	for {
 		n, err := r.Read(b)
-		fmt.Println(n, err)
+		if err != nil {
+			fmt.Println("Error: ", err.Error())
+			break
+		}
+		fmt.Println(string(b[0:n]))
 	}
-	fmt.Println(pixels)
 }
-
