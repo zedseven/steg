@@ -1,12 +1,33 @@
 package algos
 
 import (
+	"fmt"
 	"math/rand"
 
 	"github.com/zedseven/steg/internal/util"
 )
 
+// Algorithm definitions
+
+type Algo int
+
+const (
+	AlgoUnknown    Algo = iota
+	AlgoSequential Algo = iota
+	AlgoPattern    Algo = iota
+	MaxAlgoVal     Algo = iota - 1
+)
+
 // Error types
+
+type UnknownAlgoError struct {
+	Algorithm Algo
+}
+
+func (e UnknownAlgoError) Error() string {
+	return fmt.Sprintf("The specified algorithm (%d) does not exist.", e.Algorithm)
+}
+
 
 type EmptyPoolError struct {}
 
@@ -49,4 +70,39 @@ func PatternAddressor(seed, channels int64, bitsPerChannel uint8) func() (int64,
 
 		return p, nil
 	}//, &pool
+}
+
+// Algorithm type interfacing methods
+
+func AlgoAddressor(algo Algo, seed, channels int64, bitsPerChannel uint8) (func() (int64, error), error) {
+	switch algo {
+	case AlgoSequential:
+		return SequentialAddressor(channels, bitsPerChannel), nil
+	case AlgoPattern:
+		return PatternAddressor(seed, channels, bitsPerChannel), nil
+	default:
+		return nil, &UnknownAlgoError{algo}
+	}
+}
+
+func StringToAlgo(str string) Algo {
+	switch str {
+	case "sequential":
+		return AlgoSequential
+	case "pattern":
+		return AlgoPattern
+	default:
+		return AlgoUnknown
+	}
+}
+
+func AlgoToString(algo Algo) string {
+	switch algo {
+	case AlgoSequential:
+		return "sequential"
+	case AlgoPattern:
+		return "pattern"
+	default:
+		return "<Unknown>"
+	}
 }

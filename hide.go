@@ -13,7 +13,7 @@ import (
 
 // Primary method
 
-func Hide(imgPath, filePath, outPath, patternPath string, maxBitsPerChannel uint8, encodeAlpha, encodeLsb bool) error {
+func Hide(imgPath, filePath, outPath, patternPath string, algo algos.Algo, maxBitsPerChannel uint8, encodeAlpha, encodeLsb bool) error {
 	if maxBitsPerChannel < 0 || maxBitsPerChannel > 16 {
 		// TODO: Perhaps panic here instead
 		return &InvalidFormatError{fmt.Sprintf("maxBitsPerChannel is outside the allowed range of 0-16: Provided %d", maxBitsPerChannel)}
@@ -77,12 +77,14 @@ func Hide(imgPath, filePath, outPath, patternPath string, maxBitsPerChannel uint
 
 	channelCount := int64(len(*pixels)) * int64(channelsPerPix)
 	fmt.Println("Maximum writable bits:", channelCount * int64(maxBitsPerChannel))
-	// TODO: Add in proper CLI support for switching algos, and add more to choose from
-	//f := algos.SequentialAddressor(channelCount, maxBitsPerChannel)
-	f := algos.PatternAddressor(pHash, channelCount, maxBitsPerChannel)
+
+	f, err := algos.AlgoAddressor(algo, pHash, channelCount, maxBitsPerChannel)
+	if err != nil {
+		return err
+	}
 
 
-	fmt.Println("Writing the steg header...")
+	fmt.Println("Writing steg header...")
 
 	fileInfo, err := fileReader.Stat()
 	if err != nil {
@@ -151,6 +153,8 @@ func Hide(imgPath, filePath, outPath, patternPath string, maxBitsPerChannel uint
 // Helper functions
 
 func encodeChunk(pos *func() (int64, error), info imgInfo, pixels *[]pixel, channelCount, maxBitsPerChannel uint8, buf *[]byte, n int, lsb bool) error {
+	supportsAlpha := info.Format.SupportsAlpha()
+	alphaChannel := info.Format.AlphaChannel()
 	for i := 0; i < n; i++ {
 		for j := uint8(0); j < bitsPerByte; j++ {
 			writeBit := binmani.ReadFrom(uint16((*buf)[i]), bitsPerByte - j - 1, 1)
@@ -166,8 +170,7 @@ func encodeChunk(pos *func() (int64, error), info imgInfo, pixels *[]pixel, chan
 					fmt.Printf("addr: %d, pixel: %d, channel: %d, bit: %d, RGBA: %v\n", addr, p, c, b, (*pixels)[p])
 				}
 
-				// TODO: Harden this for alpha models
-				if (*pixels)[p][3] <= 0 {
+				if supportsAlpha && (*pixels)[p][alphaChannel] <= 0 {
 					continue
 				}
 

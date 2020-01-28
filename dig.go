@@ -21,7 +21,7 @@ func (e *BadHeaderError) Error() string {
 
 // Primary method
 
-func Dig(imgPath, outPath, patternPath string, maxBitsPerChannel uint8, encodeAlpha, encodeLsb bool) error {
+func Dig(imgPath, outPath, patternPath string, algo algos.Algo, maxBitsPerChannel uint8, encodeAlpha, encodeLsb bool) error {
 	if maxBitsPerChannel < 0 || maxBitsPerChannel > 16 {
 		return &InvalidFormatError{fmt.Sprintf("maxBitsPerChannel is outside the allowed range of 0-16: Provided %d", maxBitsPerChannel)}
 	}
@@ -67,11 +67,14 @@ func Dig(imgPath, outPath, patternPath string, maxBitsPerChannel uint8, encodeAl
 
 	channelCount := int64(len(*pixels)) * int64(channelsPerPix)
 	fmt.Println("Maximum readable bits:", channelCount * int64(maxBitsPerChannel))
-	//f := algos.SequentialAddressor(channelCount, maxBitsPerChannel)
-	f := algos.PatternAddressor(pHash, channelCount, maxBitsPerChannel)
+
+	f, err := algos.AlgoAddressor(algo, pHash, channelCount, maxBitsPerChannel)
+	if err != nil {
+		return err
+	}
 
 
-	fmt.Println("Reading the steg header...")
+	fmt.Println("Reading steg header...")
 
 	b, header := make([]byte, encodeChunkSize), make([]byte, encodeHeaderSize)
 	if err = decodeChunk(&f, info, pixels, channelsPerPix, maxBitsPerChannel, &header, int(encodeHeaderSize), encodeLsb); err != nil {
@@ -107,9 +110,7 @@ func Dig(imgPath, outPath, patternPath string, maxBitsPerChannel uint8, encodeAl
 		return err
 	}
 
-	if debugOutput {
-		fmt.Println("File size:", fileSize)
-	}
+	fmt.Printf("Output file size: %d B\n", fileSize)
 
 
 	fmt.Printf("Creating the output file at '%v'...\n", outPath)

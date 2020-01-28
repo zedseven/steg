@@ -35,13 +35,19 @@ func (info *fmtInfo) BytesPerChannel() uint8 {
 	return uint8(math.Ceil(float64(info.BitsPerChannel / bitsPerByte)))
 }
 
-func (info *fmtInfo) SupportsAlpha() bool {
+func (info *fmtInfo) AlphaChannel() int8 {
 	switch info.Model {
-	case color.RGBAModel, color.RGBA64Model, color.NRGBAModel, color.NRGBA64Model, color.AlphaModel, color.Alpha16Model:
-		return true
+	case color.RGBAModel, color.RGBA64Model, color.NRGBAModel, color.NRGBA64Model:
+		return 3
+	case color.AlphaModel, color.Alpha16Model:
+		return 0
 	default:
-		return false
+		return -1
 	}
+}
+
+func (info *fmtInfo) SupportsAlpha() bool {
+	return info.AlphaChannel() >= 0
 }
 
 func (info *fmtInfo) String() string {
