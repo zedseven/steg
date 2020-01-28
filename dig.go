@@ -1,17 +1,23 @@
-package op
+package steg
 
 import (
 	"fmt"
-	"github.com/zedseven/steg/imgio"
+	"os"
 	"strconv"
 	"strings"
+
+	"github.com/zedseven/steg/internal/algos"
+	"github.com/zedseven/steg/internal/util"
+	"github.com/zedseven/steg/pkg/binmani"
 )
+
+// Primary method
 
 func Dig(imgPath, outPath, patternPath string, bpc uint8, alpha, lsb bool) {
 	maxBitsPerChannel, encodeAlpha, encodeLsb = bpc, alpha, lsb
 
 	fmt.Printf("Loading the image from '%v'...\n", imgPath)
-	pixels, iinfo, err := imgio.LoadImage(imgPath)
+	pixels, iinfo, err := loadImage(imgPath)
 
 	if err != nil {
 		fmt.Printf("Unable to load the image at '%v'! %v\n", imgPath, err.Error())
@@ -19,7 +25,7 @@ func Dig(imgPath, outPath, patternPath string, bpc uint8, alpha, lsb bool) {
 	}
 
 	fmt.Println("Loading up the pattern key...")
-	pHash := imgio.HashPatternFile(patternPath)
+	pHash := hashPatternFile(patternPath)
 	fmt.Println("Pattern hash:", pHash)
 
 	channelsPerPix := uint8(3)
@@ -29,10 +35,10 @@ func Dig(imgPath, outPath, patternPath string, bpc uint8, alpha, lsb bool) {
 	channelCount := int64(len(*pixels)) * int64(channelsPerPix) //TODO: incorporate iinfo.Format.ChannelsPerPix
 	//int64(len(pixels)) * int64(len(pixels[0])) * int64(channelsPerPix)
 	fmt.Println("channelCount:", channelCount)
-	//f := sequentialAddressor(channelCount, maxBitsPerChannel)
-	f := patternAddressor(pHash, channelCount, maxBitsPerChannel)
+	//f := algos.SequentialAddressor(channelCount, maxBitsPerChannel)
+	f := algos.PatternAddressor(pHash, channelCount, maxBitsPerChannel)
 
-	_, header := make([]byte, encodeChunkSize), make([]byte, encodeHeaderSize)
+	b, header := make([]byte, encodeChunkSize), make([]byte, encodeHeaderSize)
 	decodeChunk(&f, iinfo, pixels, channelsPerPix, &header, int(encodeHeaderSize))
 
 	headerStr := string(header[0:])
@@ -54,9 +60,33 @@ func Dig(imgPath, outPath, patternPath string, bpc uint8, alpha, lsb bool) {
 		fmt.Println("The read filesize is not valid!")
 	}
 	fmt.Println("File size:", fileSize)
+
+	fmt.Printf("Creating the file at '%v'...\n", outPath)
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		fmt.Printf("There was an error creating the file '%v': %v\n", outPath, err.Error())
+	}
+	defer func() {
+		if err = outFile.Close(); err != nil {
+			fmt.Println("Error closing the file:", err.Error())
+		}
+	}()
+
+	fmt.Printf("Writing to the file at '%v'...\n", outPath)
+	readBytes := int64(0)
+	for readBytes < fileSize {
+		n := util.Min(int(encodeChunkSize), int(fileSize - readBytes))
+		decodeChunk(&f, iinfo, pixels, channelsPerPix, &b, n)
+		outFile.Write(b[:n])
+		readBytes += int64(n)
+	}
+
+	fmt.Println("All done! c:")
 }
 
-func decodeChunk(pos *func() (int64, error), info imgio.ImgInfo, pixels *[]imgio.Pixel, channelCount uint8, buf *[]byte, n int) {
+// Helper functions
+
+func decodeChunk(pos *func() (int64, error), info imgInfo, pixels *[]pixel, channelCount uint8, buf *[]byte, n int) {
 	for i := 0; i < n; i++ {
 		for j := uint8(0); j < bitsPerByte; j++ {
 			for {
@@ -65,24 +95,25 @@ func decodeChunk(pos *func() (int64, error), info imgio.ImgInfo, pixels *[]imgio
 					fmt.Errorf("Something went seriously wrong when fetching the next bit address: %v\n", err.Error())
 					panic("Something went seriously wrong when fetching the next bit address.")
 				}
-				p, c, b := imgio.BitAddrToPCB(addr, channelCount, maxBitsPerChannel)
-				//x, y := imgio.PosToXY(p, int(info.W))
+				p, c, b := bitAddrToPCB(addr, channelCount, maxBitsPerChannel)
+				//x, y := imgio.posToXY(p, int(info.W))
 				//fmt.Printf("addr: %d, pixel: (%d: %d, %d), channel: %d, bit: %d, RGBA: %v\n", addr, p, x, y, c, b, (*pixels)[y][x])
 				fmt.Printf("addr: %d, pixel: %d, channel: %d, bit: %d, RGBA: %v\n", addr, p, c, b, (*pixels)[p])
-				if (*pixels)[p].Channels[3] <= 0 {
+				//TODO: Note that this has the potential to induce nasty bugs if a (0,0,0,1) is turned into a (0,0,0,0)
+				if (*pixels)[p][3] <= 0 {
 					continue
 				}
 
 				var channelAddr *uint16
 				switch c {
 				case 0:
-					channelAddr = &(*pixels)[p].Channels[0]
+					channelAddr = &(*pixels)[p][0]
 				case 1:
-					channelAddr = &(*pixels)[p].Channels[1]
+					channelAddr = &(*pixels)[p][1]
 				case 2:
-					channelAddr = &(*pixels)[p].Channels[2]
+					channelAddr = &(*pixels)[p][2]
 				case 3:
-					channelAddr = &(*pixels)[p].Channels[3]
+					channelAddr = &(*pixels)[p][3]
 				}
 
 				bitPos := b
@@ -90,8 +121,8 @@ func decodeChunk(pos *func() (int64, error), info imgio.ImgInfo, pixels *[]imgio
 					bitPos = bitsPerByte - b - 1
 				}
 
-				readBit := imgio.ReadFrom(*channelAddr, bitPos, 1)
-				(*buf)[i] = byte(imgio.WriteTo(uint16((*buf)[i]), bitsPerByte - j - 1, 1, readBit))
+				readBit := binmani.ReadFrom(*channelAddr, bitPos, 1)
+				(*buf)[i] = byte(binmani.WriteTo(uint16((*buf)[i]), bitsPerByte - j - 1, 1, readBit))
 
 				fmt.Printf("	Read %d\n", readBit)
 

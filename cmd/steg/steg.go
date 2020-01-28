@@ -2,14 +2,15 @@ package main
 
 import (
 	"flag"
-	//"fmt"
-	"github.com/zedseven/steg/op"
-	//"os"
+	
+	"github.com/zedseven/steg"
 )
+
+// Program entry point
 
 func main() {
 	//hideCmd := flag.NewFlagSet("hide", flag.ExitOnError)
-	//digCmd := flag.NewFlagset("dig", flag.ExitOnError)
+	//digCmd := flag.NewFlagSet("dig", flag.ExitOnError)
 	digToggle := flag.Bool("dig", false, "Whether to extract a file instead of hiding it")
 	imgPath := flag.String("img", "", "The filepath to the image on disk")
 	filePath := flag.String("file", "", "The filepath to the file on disk")
@@ -30,9 +31,9 @@ func main() {
 		return
 	}
 	if !*digToggle {
-		op.Hide(*imgPath, *filePath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb)
+		steg.Hide(*imgPath, *filePath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb)
 	} else {
-		op.Dig(*imgPath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb)
+		steg.Dig(*imgPath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb)
 	}
 }
 
