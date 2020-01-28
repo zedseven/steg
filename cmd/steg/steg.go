@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	
+
 	"github.com/zedseven/steg"
 )
 
