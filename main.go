@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	//"fmt"
 	"github.com/zedseven/steg/op"
 	//"os"
 )
@@ -16,8 +16,8 @@ func main() {
 	outPath := flag.String("out", "", "The filepath to write the steg image to")
 	patternPath := flag.String("pattern", "", "The filepath to the file used for the pattern hash")
 	bits := flag.Uint("bits", 1, "The number of bits to modify per channel (1-8), at a maximum (working inwards as determined by -msb)")
-	lsb := flag.Bool("msb", false, "Whether to modify the most or least-significant bit - mostly for debugging")
-	encodeAlpha := flag.Bool("alpha", true, "Whether to touch the alpha (transparency) channel")
+	msb := flag.Bool("msb", false, "Whether to modify the most-significant bits instead - mostly for debugging")
+	encodeAlpha := flag.Bool("alpha", false, "Whether to touch the alpha (transparency) channel")
 
 	/*if len(os.Args) < 2 {
 		fmt.Println("You have to specify what you want me to do!")
@@ -30,11 +30,9 @@ func main() {
 		return
 	}
 	if !*digToggle {
-		op.Hide(*imgPath, *filePath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*lsb)
+		op.Hide(*imgPath, *filePath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb)
 	} else {
-
+		op.Dig(*imgPath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb)
 	}
-	
-	fmt.Println("Hello world! I'm steg. c:")
 }
 

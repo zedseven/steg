@@ -5,26 +5,21 @@ import (
 	"fmt"
 	"github.com/zedseven/steg/imgio"
 	"io"
-	"math/rand"
 	"os"
 )
-
-const bitsPerByte uint8 = 8
-const encodeChunkSize uint8 = 32
-var maxBitsPerChannel uint8 = 1
-var encodeAlpha = true
-var encodeLsb = true //For debugging
 
 func Hide(imgPath, filePath, outPath, patternPath string, bpc uint8, alpha, lsb bool) {
 	maxBitsPerChannel, encodeAlpha, encodeLsb = bpc, alpha, lsb
 
 	fmt.Printf("Loading the image from '%v'...\n", imgPath)
-	pixels, err := imgio.LoadImage(imgPath)
+	pixels, iinfo, err := imgio.LoadImage(imgPath)
 
 	if err != nil {
 		fmt.Printf("Unable to load the image at '%v'! %v\n", imgPath, err.Error())
 		return
 	}
+
+	fmt.Println("Image info:", iinfo)
 
 	fmt.Printf("Opening the file at '%v'...\n", filePath)
 	buf, err := os.Open(filePath)
@@ -36,7 +31,7 @@ func Hide(imgPath, filePath, outPath, patternPath string, bpc uint8, alpha, lsb 
 
 	defer func() {
 		if err = buf.Close(); err != nil {
-			fmt.Println("Error closing the file", err.Error())
+			fmt.Println("Error closing the file:", err.Error())
 		}
 	}()
 
@@ -48,18 +43,35 @@ func Hide(imgPath, filePath, outPath, patternPath string, bpc uint8, alpha, lsb 
 	//Write the file data to the pixels data
 	r := bufio.NewReader(buf)
 	b := make([]byte, encodeChunkSize)
-	channelsPerPix := uint8(4)
-	if !encodeAlpha {
-		channelsPerPix = 3
+	channelsPerPix := uint8(3)
+	if encodeAlpha {
+		channelsPerPix = 4
 	}
-	channelCount := int64(len(pixels)) * int64(len(pixels[0])) * int64(channelsPerPix)
+	channelCount := int64(len(*pixels)) * int64(channelsPerPix) //TODO: incorporate iinfo.Format.ChannelsPerPix
+	//int64(len(pixels)) * int64(len(pixels[0])) * int64(channelsPerPix)
 	fmt.Println("channelCount:", channelCount)
-	f, _ := bitAddresser(pHash, channelCount, maxBitsPerChannel)
+	//f := sequentialAddressor(channelCount, maxBitsPerChannel)
+	f := patternAddressor(pHash, channelCount, maxBitsPerChannel)
+
+	//Write the encoding header
+	info, err := buf.Stat()
+	if err != nil {
+		fmt.Println("Unable to retrieve file info:", err.Error())
+	}
+
+	b = []byte(fmt.Sprintf("steg%02d.%02d.%02d%v%019d", versionMax, versionMid, versionMin, encodeHeaderSeparator, info.Size()))
+	fmt.Println("Encoding header:", string(b[0:]))
+	encodeChunk(&f, iinfo, pixels, channelsPerPix, &b, int(encodeHeaderSize))
+
+	for _, v := range b {
+		fmt.Printf("%#08b\n", v)
+	}
+
 	for {
 		n, err := r.Read(b)
 		if n > 0 {
 			//fmt.Println(string(b[0:n]))
-			encodeChunk(&f, &pixels, channelsPerPix, b, n)
+			encodeChunk(&f, iinfo, pixels, channelsPerPix, &b, n)
 		}
 		if err != nil {
 			if err != io.EOF {
@@ -71,62 +83,19 @@ func Hide(imgPath, filePath, outPath, patternPath string, bpc uint8, alpha, lsb 
 
 	//Write the pixels data to file
 	fmt.Printf("Writing the encoded image to '%v' now...\n", outPath)
-	imgio.WriteImage(&pixels, outPath)
+	imgio.WriteImage(pixels, iinfo, outPath)
 
 	fmt.Println("All done! c:")
 }
 
-func makeRange(max int64) []int64 {
-	r := make([]int64, max)
-	for i := range r {
-		r[i] = int64(i)
-	}
-	return r
-}
-
-type emptyPoolError struct {}
-
-func (e emptyPoolError) Error() string {
-	return "The pool of bit addresses is empty."
-}
-
-func bitAddresser(seed, channels int64, bitsPerChannel uint8) (func() (int64, error), *[]int64) {
-	poolSize := channels * int64(bitsPerChannel)
-	pool := makeRange(poolSize)
-	rand.Seed(seed)
-	fmt.Println("poolSize:", poolSize)
-	//An implementation of the Fisher-Yates shuffling algorithm, slightly re-purposed
-	return func() (int64, error) {
-		if poolSize <= 0 {
-			return -1, &emptyPoolError{}
-		}
-
-		j := rand.Int63n(poolSize) //I'm aware this isn't crypto/rand, but I needed to be able to seed it
-
-		poolSize--
-
-		p := pool[j]
-
-		pool[j] = pool[poolSize]
-		pool = pool[:poolSize]
-
-		return p, nil
-	}, &pool
-}
-
-func encodeChunk(pos *func() (int64, error), pixels *[][]imgio.Pixel, channelCount uint8, buf []byte, n int) {
-	encodePattern(pos, pixels, channelCount, buf, n)
-}
-
-func encodePattern(pos *func() (int64, error), pixels *[][]imgio.Pixel, channelCount uint8, buf []byte, n int) {
-	w/*, h*/ := len((*pixels)[0])//, len(*pixels)
-
-	//fmt.Println("Image dims:", w, h)
+func encodeChunk(pos *func() (int64, error), info imgio.ImgInfo, pixels *[]imgio.Pixel, channelCount uint8, buf *[]byte, n int) {
+	//fmt.Println("Image dims:", info.W, info.H)
 
 	for i := 0; i < n; i++ {
 		//fmt.Printf("(%c) %#08b:\n", buf[i], buf[i])
 		for j := uint8(0); j < bitsPerByte; j++ {
-			writeBit := imgio.ReadFrom(buf[i], bitsPerByte - j - 1, 1)
+			//TODO: Look here first if errors with encoding file data correctly
+			writeBit := imgio.ReadFrom(uint16((*buf)[i]), bitsPerByte - j - 1, 1)
 
 			//fmt.Println(imgio.ReadFrom(buf[i], bitsPerByte - j - 1, 1))
 
@@ -137,36 +106,37 @@ func encodePattern(pos *func() (int64, error), pixels *[][]imgio.Pixel, channelC
 					panic("Something went seriously wrong when fetching the next bit address.")
 				}
 				p, c, b := imgio.BitAddrToPCB(addr, channelCount, maxBitsPerChannel)
-				x, y := imgio.PosToXY(p, w)
+				//x, y := imgio.PosToXY(p, w)
 				//fmt.Printf("addr: %d, pixel: (%d: %d, %d), channel: %d, bit: %d, RGBA: %v\n", addr, p, x, y, c, b, (*pixels)[y][x])
-				if (*pixels)[y][x].A <= 0 {
+				fmt.Printf("addr: %d, pixel: %d, channel: %d, bit: %d, RGBA: %v\n", addr, p, c, b, (*pixels)[p])
+				if (*pixels)[p].Channels[3] <= 0 {
 					continue
 				}
 
-				//fmt.Printf("	Writing %d...\n", writeBit)
+				fmt.Printf("	Writing %d...\n", writeBit)
 				//fmt.Printf("writing (%d, %d: %d, %d)\n", x, y, c, b)
 
-				var channelAddr *uint8
+				var channelAddr *uint16
 				switch c {
 				case 0:
-					channelAddr = &(*pixels)[y][x].R
+					channelAddr = &(*pixels)[p].Channels[0]
 				case 1:
-					channelAddr = &(*pixels)[y][x].G
+					channelAddr = &(*pixels)[p].Channels[1]
 				case 2:
-					channelAddr = &(*pixels)[y][x].B
+					channelAddr = &(*pixels)[p].Channels[2]
 				case 3:
-					channelAddr = &(*pixels)[y][x].A
+					channelAddr = &(*pixels)[p].Channels[3]
 				}
 
-				//fmt.Printf("	Pix before: %#08b - %v\n", *channelAddr, (*pixels)[y][x])
+				fmt.Printf("	Channel before: %#016b - %v\n", *channelAddr, (*pixels)[p])
 
 				bitPos := b
 				if !encodeLsb {
-					bitPos = bitsPerByte - b - 1
+					bitPos = info.Format.BitsPerChannel - b - 1
 				}
 				*channelAddr = imgio.WriteTo(*channelAddr, bitPos, 1, writeBit)
 
-				//fmt.Printf("	Pix after:  %#08b - %v\n", *channelAddr, (*pixels)[y][x])
+				fmt.Printf("	Channel after:  %#016b - %v\n", *channelAddr, (*pixels)[p])
 
 				break
 			}
