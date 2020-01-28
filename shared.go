@@ -10,25 +10,23 @@ import (
 )
 
 const (
-	bitsPerByte uint8 = 8
-	encodeChunkSize uint8 = 32
-	encodeHeaderSize uint8 = 32
+	bitsPerByte           uint8  = 8
+	debugOutput           bool   = false
+	encodeChunkSize       uint8  = 32
+	encodeHeaderSize      uint8  = 32
 	encodeHeaderSeparator string = ";"
-	versionMax uint8 = 0
-	versionMid uint8 = 9
-	versionMin uint8 = 0
+	VersionMax            uint8  = 0
+	VersionMid            uint8  = 9
+	VersionMin            uint8  = 0
 )
-
-var maxBitsPerChannel uint8 = 1
-var encodeAlpha = true
-var encodeLsb = true //For debugging
 
 // Shared types
 
 type pixel []uint16
 
+
 type fmtInfo struct {
-	Model color.Model
+	Model          color.Model
 	ChannelsPerPix uint8
 	BitsPerChannel uint8
 }
@@ -37,14 +35,26 @@ func (info *fmtInfo) BytesPerChannel() uint8 {
 	return uint8(math.Ceil(float64(info.BitsPerChannel / bitsPerByte)))
 }
 
+func (info *fmtInfo) SupportsAlpha() bool {
+	switch info.Model {
+	case color.RGBAModel, color.RGBA64Model, color.NRGBAModel, color.NRGBA64Model, color.AlphaModel, color.Alpha16Model:
+		return true
+	default:
+		return false
+	}
+}
+
 func (info *fmtInfo) String() string {
 	return fmt.Sprintf("{%v %d %d}", colourModelToStr(info.Model), info.ChannelsPerPix, info.BitsPerChannel)
 }
+
 
 type imgInfo struct {
 	W, H   uint
 	Format fmtInfo
 }
+
+// Error types
 
 type unknownColourModelError struct {}
 
@@ -52,12 +62,49 @@ func (e unknownColourModelError) Error() string {
 	return "The colour model of the provided Image is unknown."
 }
 
+
+type InvalidFormatError struct {
+	ErrorDesc string
+}
+
+func (e InvalidFormatError) Error() string {
+	if len(e.ErrorDesc) > 0 {
+		return e.ErrorDesc
+	}
+	return "The provided data is of an invalid format."
+}
+
+
+type InsufficientHidingSpotsError struct {
+	AdditionalInfo string
+	InnerError error
+}
+
+func (e *InsufficientHidingSpotsError) Error() string {
+	ret := "There is not enough space available to store the provided file within the provided image."
+	if len(e.AdditionalInfo) > 0 && e.InnerError != nil {
+		return fmt.Sprintf("%v Additional info: %v Inner error: %v", ret, e.AdditionalInfo, e.InnerError.Error())
+	} else if len(e.AdditionalInfo) > 0 {
+		return fmt.Sprintf("%v Additional info: %v", ret, e.AdditionalInfo)
+	} else if e.InnerError != nil {
+		return fmt.Sprintf("%v Inner error: %v", ret, e.InnerError.Error())
+	}
+	return ret
+}
+
+// Library methods
+
+func Version() string {
+	return fmt.Sprintf("%02d.%02d.%02d", VersionMax, VersionMid, VersionMin)
+}
+
 // Shared methods
 
-func hashPatternFile(patternPath string) int64 {
+func hashPatternFile(patternPath string) (int64, error) {
 	f, err := os.Open(patternPath)
 	if err != nil {
-		fmt.Errorf("Unable to open the pattern file '%v': %v\n", patternPath, err.Error())
+		fmt.Printf("Unable to open the pattern file '%v': %v\n", patternPath, err.Error())
+		return -1, err
 	}
 
 	h := fnv.New64()
@@ -66,21 +113,25 @@ func hashPatternFile(patternPath string) int64 {
 	for {
 		n, err := f.Read(b)
 		if n > 0 {
-			h.Write(b[0:n])
+			if _, werr := h.Write(b[0:n]); werr != nil {
+				return -1, werr
+			}
 		}
 		if err != nil {
 			if err != io.EOF {
-				fmt.Println("An error occurred while reading the file:", err.Error())
+				fmt.Println("An error occurred while reading the file.")
+				return -1, err
 			}
 			break
 		}
 	}
 
-	return int64(h.Sum64())
+	return int64(h.Sum64()), nil
 }
 
-//PCB = pixel, Channel, Bit #
+// PCB = Pixel, Channel, Bit
 func bitAddrToPCB(addr int64, channels, bitsPerChannel uint8) (pix int64, channel, bit uint8) {
+	// Would normally floor here, but since all values are >= 0, integer division handles this for us
 	pix = addr / int64(channels * bitsPerChannel)
 	channel = uint8(addr / int64(bitsPerChannel)) % channels
 	bit = uint8(addr % int64(channels * bitsPerChannel)) % bitsPerChannel
@@ -89,7 +140,6 @@ func bitAddrToPCB(addr int64, channels, bitsPerChannel uint8) (pix int64, channe
 
 func posToXY(pos int64, w int) (x, y int) {
 	x = int(pos % int64(w))
-	//Would normally floor here, but since all values are >= 0, integer division handles this for us
 	y = int(pos / int64(w))
 	return
 }

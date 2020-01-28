@@ -21,3 +21,7 @@ func Max(a, b int) int {
 	}
 	return b
 }
+
+func Clamp(min, max, val int) int {
+	return Min(max, Max(min, val))
+}

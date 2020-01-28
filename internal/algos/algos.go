@@ -1,7 +1,6 @@
 package algos
 
 import (
-	"fmt"
 	"math/rand"
 
 	"github.com/zedseven/steg/internal/util"
@@ -33,7 +32,6 @@ func PatternAddressor(seed, channels int64, bitsPerChannel uint8) func() (int64,
 	poolSize := channels * int64(bitsPerChannel)
 	pool := util.MakeRange(poolSize)
 	rand.Seed(seed)
-	fmt.Println("poolSize:", poolSize)
 	//An implementation of the Fisher-Yates shuffling algorithm, slightly re-purposed
 	return func() (int64, error) {
 		if poolSize <= 0 {

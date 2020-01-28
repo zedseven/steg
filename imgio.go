@@ -13,26 +13,24 @@ import (
 
 // Primary methods
 
-func loadImage(imgPath string) (pixels *[]pixel, info imgInfo, e error) {
+func loadImage(imgPath string) (pixels *[]pixel, info imgInfo, err error) {
 	imgFile, err := os.Open(imgPath)
-
 	if err != nil {
 		fmt.Println("Unable to open the image!", err.Error())
-		return
+		return nil, imgInfo{}, err
 	}
 
 	defer func() {
 		if err = imgFile.Close(); err != nil {
-			fmt.Println("Error closing the file:", err.Error())
+			fmt.Printf("Error closing the file '%v': %v", imgPath, err.Error())
 		}
 	}()
 
 	pixels, info, err = readPixels(imgFile)
-	//fmt.Println(pixels)
 
 	if err != nil {
 		fmt.Println("The image couldn't be decoded:", err.Error())
-		return
+		return nil, imgInfo{}, err
 	}
 
 	return
@@ -40,6 +38,7 @@ func loadImage(imgPath string) (pixels *[]pixel, info imgInfo, e error) {
 
 func writeImage(pixels *[]pixel, info imgInfo, outPath string) error {
 	var img image.Image
+
 	switch info.Format.Model {
 	case color.Alpha16Model:
 		simg := image.NewAlpha16(image.Rectangle{Max: image.Point{int(info.W), int(info.H)}})
@@ -84,15 +83,17 @@ func writeImage(pixels *[]pixel, info imgInfo, outPath string) error {
 
 	f, err := os.Create(outPath)
 	if err != nil {
-		fmt.Printf("There was an error creating the file '%v': %v\n", outPath, err.Error())
+		fmt.Printf("There was an error creating the file '%v'.\n", outPath)
+		return err
 	}
+
 	defer func() {
 		if err = f.Close(); err != nil {
-			fmt.Println("Error closing the file:", err.Error())
+			fmt.Printf("Error closing the file '%v': %v", outPath, err.Error())
 		}
 	}()
 
-	//TODO: Add support for additional format exports
+	// TODO: Add support for additional format exports
 	encoder := png.Encoder{CompressionLevel:png.BestCompression}
 	err = encoder.Encode(f, img)
 	if err != nil {
@@ -104,9 +105,8 @@ func writeImage(pixels *[]pixel, info imgInfo, outPath string) error {
 
 // Helper functions
 
-func readPixels(imgFile io.Reader) (pixels *[]pixel, info imgInfo, e error) {
+func readPixels(imgFile io.Reader) (pixels *[]pixel, info imgInfo, err error) {
 	img, _, err := image.Decode(imgFile)
-	//img, err := png.Decode(imgFile)
 
 	if err != nil {
 		return nil, imgInfo{}, err
@@ -117,8 +117,7 @@ func readPixels(imgFile io.Reader) (pixels *[]pixel, info imgInfo, e error) {
 
 	info = imgInfo{W: uint(w), H:uint(h)}
 
-	fmt.Println("Colour model:", colourModelToStr(img.ColorModel()))
-	//Handle each image type independently, parsing out the pixel channel values
+	// Each colour model has to be handled individually
 	switch img.(type) {
 	case *image.Alpha16:
 		info.Format = fmtInfo{color.Alpha16Model, 4, 16}
@@ -168,8 +167,8 @@ func imgPixToPixels(pix *[]uint8, info fmtInfo) *[]pixel {
 	for i := range pixels {
 		pixels[i] = make([]uint16, info.ChannelsPerPix)
 		for j := uint8(0); j < info.ChannelsPerPix; j++ {
-			//Image raw Pix arrays store multi-byte channel values in big-endian format
-			//across separate indices (https://golang.org/src/image/image.go?s=8222:8528#L380)
+			// Image raw Pix arrays store multi-byte channel values in big-endian format
+			// across separate indices (https://golang.org/src/image/image.go?s=8222:8528#L380)
 			for k := uint8(0); k < info.BytesPerChannel(); k++ {
 				pixels[i][j] <<= bitsPerByte
 				pixels[i][j] += uint16((*pix)[i * int(info.ChannelsPerPix * bytesPerChannel) + int(j * bytesPerChannel)])

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 
 	"github.com/zedseven/steg"
 )
@@ -16,7 +17,7 @@ func main() {
 	filePath := flag.String("file", "", "The filepath to the file on disk")
 	outPath := flag.String("out", "", "The filepath to write the steg image to")
 	patternPath := flag.String("pattern", "", "The filepath to the file used for the pattern hash")
-	bits := flag.Uint("bits", 1, "The number of bits to modify per channel (1-8), at a maximum (working inwards as determined by -msb)")
+	bits := flag.Uint("bits", 1, "The number of bits to modify per channel (1-16), at a maximum (working inwards as determined by -msb)")
 	msb := flag.Bool("msb", false, "Whether to modify the most-significant bits instead - mostly for debugging")
 	encodeAlpha := flag.Bool("alpha", false, "Whether to touch the alpha (transparency) channel")
 
@@ -26,14 +27,21 @@ func main() {
 	}*/
 	flag.Parse()
 
-	if len(*imgPath) <= 0 || len(*filePath) <= 0 || len(*outPath) <= 0 || *bits <= 0 || *bits > 8 {
+	//TODO: Make some of the below values constants
+	if len(*imgPath) <= 0 || len(*filePath) <= 0 || len(*outPath) <= 0 || *bits <= 0 || *bits > 16 {
 		flag.PrintDefaults()
 		return
 	}
 	if !*digToggle {
-		steg.Hide(*imgPath, *filePath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb)
+		if err := steg.Hide(*imgPath, *filePath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb); err != nil {
+			fmt.Println(err.Error())
+			return
+		}
 	} else {
-		steg.Dig(*imgPath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb)
+		if err := steg.Dig(*imgPath, *outPath, *patternPath, uint8(*bits), *encodeAlpha, !*msb); err != nil {
+			fmt.Println(err.Error())
+			return
+		}
 	}
 }
 

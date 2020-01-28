@@ -11,125 +11,187 @@ import (
 	"github.com/zedseven/steg/pkg/binmani"
 )
 
+// Types
+
+type BadHeaderError struct {}
+
+func (e *BadHeaderError) Error() string {
+	return "The read header is not valid!"
+}
+
 // Primary method
 
-func Dig(imgPath, outPath, patternPath string, bpc uint8, alpha, lsb bool) {
-	maxBitsPerChannel, encodeAlpha, encodeLsb = bpc, alpha, lsb
+func Dig(imgPath, outPath, patternPath string, maxBitsPerChannel uint8, encodeAlpha, encodeLsb bool) error {
+	if maxBitsPerChannel < 0 || maxBitsPerChannel > 16 {
+		return &InvalidFormatError{fmt.Sprintf("maxBitsPerChannel is outside the allowed range of 0-16: Provided %d", maxBitsPerChannel)}
+	}
+
+	if debugOutput {
+		fmt.Println("This tool has been compiled and set to display debug output.")
+	}
 
 	fmt.Printf("Loading the image from '%v'...\n", imgPath)
-	pixels, iinfo, err := loadImage(imgPath)
-
+	pixels, info, err := loadImage(imgPath)
 	if err != nil {
-		fmt.Printf("Unable to load the image at '%v'! %v\n", imgPath, err.Error())
-		return
+		fmt.Printf("Unable to load the image at '%v'!\n", imgPath)
+		return err
 	}
+
+	maxBitsPerChannel = uint8(util.Min(int(maxBitsPerChannel), int(info.Format.BitsPerChannel)))
+
+	fmt.Printf("Image info:\n\tDimensions: %dx%d\n\tColour model: %v\n\tChannels per pixel: %d\n\tBits per channel: %d\n",
+		info.W, info.H, colourModelToStr(info.Format.Model), info.Format.ChannelsPerPix, info.Format.BitsPerChannel)
+
 
 	fmt.Println("Loading up the pattern key...")
-	pHash := hashPatternFile(patternPath)
+	pHash, err := hashPatternFile(patternPath)
+	if err != nil {
+		fmt.Printf("Something went wrong while attempting to hash the pattern file '%v'.\n", patternPath)
+		return err
+	}
 	fmt.Println("Pattern hash:", pHash)
 
-	channelsPerPix := uint8(3)
-	if encodeAlpha {
-		channelsPerPix = 4
+
+
+	fmt.Println("Reading the file from the image...")
+
+	channelsPerPix := info.Format.ChannelsPerPix
+	if info.Format.SupportsAlpha() && !encodeAlpha {
+		channelsPerPix--
 	}
-	channelCount := int64(len(*pixels)) * int64(channelsPerPix) //TODO: incorporate iinfo.Format.ChannelsPerPix
-	//int64(len(pixels)) * int64(len(pixels[0])) * int64(channelsPerPix)
-	fmt.Println("channelCount:", channelCount)
+	if channelsPerPix <= 0 { // In the case of Alpha & Alpha16 models
+		return &InsufficientHidingSpotsError{AdditionalInfo:fmt.Sprintf("The provided image is of the %v colour" +
+			"model, but since alpha-channel encoding was not specified, there are no channels to hide data within.\n",
+			colourModelToStr(info.Format.Model))}
+	}
+
+	channelCount := int64(len(*pixels)) * int64(channelsPerPix)
+	fmt.Println("Maximum readable bits:", channelCount * int64(maxBitsPerChannel))
 	//f := algos.SequentialAddressor(channelCount, maxBitsPerChannel)
 	f := algos.PatternAddressor(pHash, channelCount, maxBitsPerChannel)
 
+
+	fmt.Println("Reading the steg header...")
+
 	b, header := make([]byte, encodeChunkSize), make([]byte, encodeHeaderSize)
-	decodeChunk(&f, iinfo, pixels, channelsPerPix, &header, int(encodeHeaderSize))
+	if err = decodeChunk(&f, info, pixels, channelsPerPix, maxBitsPerChannel, &header, int(encodeHeaderSize), encodeLsb); err != nil {
+		switch err.(type) {
+		case *algos.EmptyPoolError:
+			return &InsufficientHidingSpotsError{InnerError:err}
+		default:
+			return err
+		}
+	}
 
 	headerStr := string(header[0:])
 
-	fmt.Println("Encoding header:", headerStr)
-
-	for _, v := range header {
-		fmt.Printf("%#08b\n", v)
+	if debugOutput {
+		fmt.Println("Encoding header:", headerStr)
+		for _, v := range b {
+			fmt.Printf("%#08b\n", v)
+		}
 	}
 
 	headerParts := strings.Split(headerStr, encodeHeaderSeparator)
 	if len(headerParts) < 2 {
-		fmt.Println("The read header is not valid!")
+		return &BadHeaderError{}
 	}
-	fmt.Println("Header parts:", headerParts)
+
+	if debugOutput {
+		fmt.Println("Header parts:", headerParts)
+	}
 
 	fileSize, err := strconv.ParseInt(headerParts[1], 10, 64)
 	if err != nil {
-		fmt.Println("The read filesize is not valid!")
+		fmt.Println("The read file size is not valid!")
+		return err
 	}
-	fmt.Println("File size:", fileSize)
 
-	fmt.Printf("Creating the file at '%v'...\n", outPath)
+	if debugOutput {
+		fmt.Println("File size:", fileSize)
+	}
+
+
+	fmt.Printf("Creating the output file at '%v'...\n", outPath)
 	outFile, err := os.Create(outPath)
 	if err != nil {
-		fmt.Printf("There was an error creating the file '%v': %v\n", outPath, err.Error())
+		fmt.Printf("There was an error creating the file '%v'.\n", outPath)
+		return err
 	}
+
 	defer func() {
 		if err = outFile.Close(); err != nil {
 			fmt.Println("Error closing the file:", err.Error())
 		}
 	}()
 
-	fmt.Printf("Writing to the file at '%v'...\n", outPath)
+
+	fmt.Printf("Writing to the output file at '%v'...\n", outPath)
 	readBytes := int64(0)
 	for readBytes < fileSize {
 		n := util.Min(int(encodeChunkSize), int(fileSize - readBytes))
-		decodeChunk(&f, iinfo, pixels, channelsPerPix, &b, n)
-		outFile.Write(b[:n])
-		readBytes += int64(n)
+		if err = decodeChunk(&f, info, pixels, channelsPerPix, maxBitsPerChannel, &b, n, encodeLsb); err != nil {
+			switch err.(type) {
+			case *algos.EmptyPoolError:
+				return &InsufficientHidingSpotsError{InnerError:err}
+			default:
+				return err
+			}
+		}
+		if r, err := outFile.Write(b[:n]); err != nil {
+			return err
+		} else {
+			readBytes += int64(r)
+		}
 	}
 
+
 	fmt.Println("All done! c:")
+
+	return nil
 }
 
 // Helper functions
 
-func decodeChunk(pos *func() (int64, error), info imgInfo, pixels *[]pixel, channelCount uint8, buf *[]byte, n int) {
+func decodeChunk(pos *func() (int64, error), info imgInfo, pixels *[]pixel, channelCount, maxBitsPerChannel uint8, buf *[]byte, n int, lsb bool) error {
 	for i := 0; i < n; i++ {
 		for j := uint8(0); j < bitsPerByte; j++ {
 			for {
 				addr, err := (*pos)()
 				if err != nil {
-					fmt.Errorf("Something went seriously wrong when fetching the next bit address: %v\n", err.Error())
-					panic("Something went seriously wrong when fetching the next bit address.")
+					return err
 				}
 				p, c, b := bitAddrToPCB(addr, channelCount, maxBitsPerChannel)
-				//x, y := imgio.posToXY(p, int(info.W))
-				//fmt.Printf("addr: %d, pixel: (%d: %d, %d), channel: %d, bit: %d, RGBA: %v\n", addr, p, x, y, c, b, (*pixels)[y][x])
-				fmt.Printf("addr: %d, pixel: %d, channel: %d, bit: %d, RGBA: %v\n", addr, p, c, b, (*pixels)[p])
-				//TODO: Note that this has the potential to induce nasty bugs if a (0,0,0,1) is turned into a (0,0,0,0)
+
+				if debugOutput {
+					fmt.Printf("addr: %d, pixel: %d, channel: %d, bit: %d, RGBA: %v\n", addr, p, c, b, (*pixels)[p])
+				}
+
+				// TODO: Note that this has the potential to introduce nasty bugs if a (0,0,0,1) is turned into a (0,0,0,0)
 				if (*pixels)[p][3] <= 0 {
 					continue
 				}
 
-				var channelAddr *uint16
-				switch c {
-				case 0:
-					channelAddr = &(*pixels)[p][0]
-				case 1:
-					channelAddr = &(*pixels)[p][1]
-				case 2:
-					channelAddr = &(*pixels)[p][2]
-				case 3:
-					channelAddr = &(*pixels)[p][3]
-				}
-
 				bitPos := b
-				if !encodeLsb {
+				if !lsb {
 					bitPos = bitsPerByte - b - 1
 				}
 
-				readBit := binmani.ReadFrom(*channelAddr, bitPos, 1)
+				readBit := binmani.ReadFrom((*pixels)[p][c], bitPos, 1)
 				(*buf)[i] = byte(binmani.WriteTo(uint16((*buf)[i]), bitsPerByte - j - 1, 1, readBit))
 
-				fmt.Printf("	Read %d\n", readBit)
+				if debugOutput {
+					fmt.Printf("	Read %d\n", readBit)
+				}
 
 				break
 			}
 		}
 	}
 
-	fmt.Println("Read chunk:", string(*buf))
+	if debugOutput {
+		fmt.Println("Read chunk:", string(*buf))
+	}
+
+	return nil
 }
