@@ -39,7 +39,7 @@ func Dig(imgPath, outPath, patternPath string, algo algos.Algo, maxBitsPerChanne
 
 	maxBitsPerChannel = uint8(util.Min(int(maxBitsPerChannel), int(info.Format.BitsPerChannel)))
 
-	fmt.Printf("Image info:\n\tDimensions: %dx%d\n\tColour model: %v\n\tChannels per pixel: %d\n\tBits per channel: %d\n",
+	fmt.Printf("Image info:\n\tDimensions: %dx%d px\n\tColour model: %v\n\tChannels per pixel: %d\n\tBits per channel: %d\n",
 		info.W, info.H, colourModelToStr(info.Format.Model), info.Format.ChannelsPerPix, info.Format.BitsPerChannel)
 
 

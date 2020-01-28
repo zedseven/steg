@@ -32,7 +32,7 @@ func Hide(imgPath, filePath, outPath, patternPath string, algo algos.Algo, maxBi
 
 	maxBitsPerChannel = uint8(util.Min(int(maxBitsPerChannel), int(info.Format.BitsPerChannel)))
 
-	fmt.Printf("Image info:\n\tDimensions: %dx%d\n\tColour model: %v\n\tChannels per pixel: %d\n\tBits per channel: %d\n",
+	fmt.Printf("Image info:\n\tDimensions: %dx%d px\n\tColour model: %v\n\tChannels per pixel: %d\n\tBits per channel: %d\n",
 		info.W, info.H, colourModelToStr(info.Format.Model), info.Format.ChannelsPerPix, info.Format.BitsPerChannel)
 
 
@@ -76,7 +76,8 @@ func Hide(imgPath, filePath, outPath, patternPath string, algo algos.Algo, maxBi
 	}
 
 	channelCount := int64(len(*pixels)) * int64(channelsPerPix)
-	fmt.Println("Maximum writable bits:", channelCount * int64(maxBitsPerChannel))
+	maxWritableBits := channelCount * int64(maxBitsPerChannel)
+	fmt.Println("Maximum writable bits:", maxWritableBits)
 
 	f, err := algos.AlgoAddressor(algo, pHash, channelCount, maxBitsPerChannel)
 	if err != nil {
@@ -93,6 +94,15 @@ func Hide(imgPath, filePath, outPath, patternPath string, algo algos.Algo, maxBi
 	}
 
 	b = []byte(fmt.Sprintf("steg%02d.%02d.%02d%v%019d", VersionMax, VersionMid, VersionMin, encodeHeaderSeparator, fileInfo.Size()))
+	fmt.Printf("Input file size: %d B\n", fileInfo.Size())
+
+	bitsToWrite := fileInfo.Size() * int64(bitsPerByte)
+	fmt.Printf("Bits to write: %d\n", bitsToWrite)
+
+	if bitsToWrite > maxWritableBits {
+		return &InsufficientHidingSpotsError{AdditionalInfo:fmt.Sprintf("Since the number of bits to write is %d " +
+			"and the maximum possible with this configuration is %d, there is no way the input file will fit.\n", bitsToWrite, maxWritableBits)}
+	}
 
 	if debugOutput {
 		fmt.Println("Encoding header:", string(b[0:]))
