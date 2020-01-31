@@ -13,6 +13,19 @@ import (
 
 // Types
 
+// Stores the configuration options for the Dig operation.
+type DigConfig struct {
+	ImagePath         string      // The path on disk to a supported image.
+	OutPath           string      // The path on disk to write the output file.
+	PatternPath       string      // The path on disk to the pattern file used in decoding.
+	Algorithm         algos.Algo  // The algorithm to use in the operation.
+	MaxBitsPerChannel uint8       // The maximum number of bits to write per pixel channel - the minimum of this and the supported max of the image format is used.
+	EncodeAlpha       bool        // Whether or not to encode the alpha channel.
+	DecodeMsb         bool        // Whether to encode the most-significant bits instead - mostly for debugging.
+	OutputLevel       OutputLevel // The amount of output to provide.
+}
+
+// Thrown when the read header is garbage. Likely caused by a bad configuration or source image.
 type BadHeaderError struct {}
 
 func (e *BadHeaderError) Error() string {
@@ -21,63 +34,77 @@ func (e *BadHeaderError) Error() string {
 
 // Primary method
 
-func Dig(imgPath, outPath, patternPath string, algo algos.Algo, maxBitsPerChannel uint8, encodeAlpha, encodeLsb bool) error {
-	if maxBitsPerChannel < 0 || maxBitsPerChannel > 16 {
-		return &InvalidFormatError{fmt.Sprintf("maxBitsPerChannel is outside the allowed range of 0-16: Provided %d", maxBitsPerChannel)}
+// Extracts the binary data of a file from a provided image on disk, and saves the result to a new file.
+// The configuration must perfectly match the one used in encoding in order to extract successfully.
+func Dig(config DigConfig) error {
+	// Input validation
+	if len(config.ImagePath) <= 0 {
+		return &InvalidFormatError{"ImagePath is empty."}
+	}
+	if len(config.OutPath) <= 0 {
+		return &InvalidFormatError{"OutPath is empty."}
+	}
+	if len(config.PatternPath) <= 0 {
+		return &InvalidFormatError{"PatternPath is empty."}
+	}
+	if !config.Algorithm.IsValid() {
+		return &InvalidFormatError{"Algorithm is invalid."}
+	}
+	if config.MaxBitsPerChannel < 0 || config.MaxBitsPerChannel > 16 {
+		return &InvalidFormatError{fmt.Sprintf("MaxBitsPerChannel is outside the allowed range of 0-16: Provided %d.", config.MaxBitsPerChannel)}
 	}
 
-	if debugOutput {
-		fmt.Println("This tool has been compiled and set to display debug output.")
-	}
+	printlnLvl(config.OutputLevel, OutputDebug, "This tool has been set to display debug output.")
 
-	fmt.Printf("Loading the image from '%v'...\n", imgPath)
-	pixels, info, err := loadImage(imgPath)
+	printlnLvl(config.OutputLevel, OutputSteps, fmt.Sprintf("Loading the image from '%v'...", config.ImagePath))
+	pixels, info, err := loadImage(config.ImagePath, config.OutputLevel)
 	if err != nil {
-		fmt.Printf("Unable to load the image at '%v'!\n", imgPath)
+		printlnLvl(config.OutputLevel, OutputSteps, fmt.Sprintf("Unable to load the image at '%v'!", config.ImagePath))
 		return err
 	}
 
-	maxBitsPerChannel = uint8(util.Min(int(maxBitsPerChannel), int(info.Format.BitsPerChannel)))
+	config.MaxBitsPerChannel = uint8(util.Min(int(config.MaxBitsPerChannel), int(info.Format.BitsPerChannel)))
 
-	fmt.Printf("Image info:\n\tDimensions: %dx%d px\n\tColour model: %v\n\tChannels per pixel: %d\n\tBits per channel: %d\n",
-		info.W, info.H, colourModelToStr(info.Format.Model), info.Format.ChannelsPerPix, info.Format.BitsPerChannel)
+	printlnLvl(config.OutputLevel, OutputInfo,
+		fmt.Sprintf("Image info:\n\tDimensions: %dx%d px\n\tColour model: %v\n\tChannels per pixel: %d\n\tBits per channel: %d",
+		info.W, info.H, colourModelToStr(info.Format.Model), info.Format.ChannelsPerPix, info.Format.BitsPerChannel))
 
 
-	fmt.Println("Loading up the pattern key...")
-	pHash, err := hashPatternFile(patternPath)
+	printlnLvl(config.OutputLevel, OutputSteps, "Loading up the pattern key...")
+	pHash, err := hashPatternFile(config.PatternPath)
 	if err != nil {
-		fmt.Printf("Something went wrong while attempting to hash the pattern file '%v'.\n", patternPath)
+		printlnLvl(config.OutputLevel, OutputSteps,
+			fmt.Sprintf("Something went wrong while attempting to hash the pattern file '%v'.", config.PatternPath))
 		return err
 	}
-	fmt.Println("Pattern hash:", pHash)
+	printlnLvl(config.OutputLevel, OutputInfo, "Pattern hash:", pHash)
 
 
-
-	fmt.Println("Reading the file from the image...")
+	printlnLvl(config.OutputLevel, OutputSteps, "Reading the file from the image...")
 
 	channelsPerPix := info.Format.ChannelsPerPix
-	if info.Format.SupportsAlpha() && !encodeAlpha {
+	if info.Format.supportsAlpha() && !config.EncodeAlpha {
 		channelsPerPix--
 	}
 	if channelsPerPix <= 0 { // In the case of Alpha & Alpha16 models
 		return &InsufficientHidingSpotsError{AdditionalInfo:fmt.Sprintf("The provided image is of the %v colour" +
-			"model, but since alpha-channel encoding was not specified, there are no channels to hide data within.\n",
+			"model, but since alpha-channel encoding was not specified, there are no channels to hide data within.",
 			colourModelToStr(info.Format.Model))}
 	}
 
 	channelCount := int64(len(*pixels)) * int64(channelsPerPix)
-	fmt.Println("Maximum readable bits:", channelCount * int64(maxBitsPerChannel))
+	printlnLvl(config.OutputLevel, OutputInfo, "Maximum readable bits:", channelCount * int64(config.MaxBitsPerChannel))
 
-	f, err := algos.AlgoAddressor(algo, pHash, channelCount, maxBitsPerChannel)
+	f, err := algos.AlgoAddressor(config.Algorithm, pHash, channelCount, config.MaxBitsPerChannel)
 	if err != nil {
 		return err
 	}
 
 
-	fmt.Println("Reading steg header...")
+	printlnLvl(config.OutputLevel, OutputSteps, "Reading steg header...")
 
 	b, header := make([]byte, encodeChunkSize), make([]byte, encodeHeaderSize)
-	if err = decodeChunk(&f, info, pixels, channelsPerPix, maxBitsPerChannel, &header, int(encodeHeaderSize), encodeLsb); err != nil {
+	if err = decodeChunk(config, &f, pixels, channelsPerPix, &header, int(encodeHeaderSize)); err != nil {
 		switch err.(type) {
 		case *algos.EmptyPoolError:
 			return &InsufficientHidingSpotsError{InnerError:err}
@@ -88,7 +115,7 @@ func Dig(imgPath, outPath, patternPath string, algo algos.Algo, maxBitsPerChanne
 
 	headerStr := string(header[0:])
 
-	if debugOutput {
+	if config.OutputLevel == OutputDebug {
 		fmt.Println("Encoding header:", headerStr)
 		for _, v := range b {
 			fmt.Printf("%#08b\n", v)
@@ -100,9 +127,7 @@ func Dig(imgPath, outPath, patternPath string, algo algos.Algo, maxBitsPerChanne
 		return &BadHeaderError{}
 	}
 
-	if debugOutput {
-		fmt.Println("Header parts:", headerParts)
-	}
+	printlnLvl(config.OutputLevel, OutputDebug, "Header parts:", headerParts)
 
 	fileSize, err := strconv.ParseInt(headerParts[1], 10, 64)
 	if err != nil {
@@ -110,28 +135,28 @@ func Dig(imgPath, outPath, patternPath string, algo algos.Algo, maxBitsPerChanne
 		return err
 	}
 
-	fmt.Printf("Output file size: %d B\n", fileSize)
+	printlnLvl(config.OutputLevel, OutputInfo, fmt.Sprintf("Output file size: %d B", fileSize))
 
 
-	fmt.Printf("Creating the output file at '%v'...\n", outPath)
-	outFile, err := os.Create(outPath)
+	printlnLvl(config.OutputLevel, OutputSteps, fmt.Sprintf("Creating the output file at '%v'...", config.OutPath))
+	outFile, err := os.Create(config.OutPath)
 	if err != nil {
-		fmt.Printf("There was an error creating the file '%v'.\n", outPath)
+		printlnLvl(config.OutputLevel, OutputSteps, fmt.Sprintf("There was an error creating the file '%v'.", config.OutPath))
 		return err
 	}
 
 	defer func() {
 		if err = outFile.Close(); err != nil {
-			fmt.Println("Error closing the file:", err.Error())
+			printlnLvl(config.OutputLevel, OutputSteps, "Error closing the file:", err.Error())
 		}
 	}()
 
 
-	fmt.Printf("Writing to the output file at '%v'...\n", outPath)
+	printlnLvl(config.OutputLevel, OutputSteps, fmt.Sprintf("Writing to the output file at '%v'...", config.OutPath))
 	readBytes := int64(0)
 	for readBytes < fileSize {
 		n := util.Min(int(encodeChunkSize), int(fileSize - readBytes))
-		if err = decodeChunk(&f, info, pixels, channelsPerPix, maxBitsPerChannel, &b, n, encodeLsb); err != nil {
+		if err = decodeChunk(config, &f, pixels, channelsPerPix, &b, n); err != nil {
 			switch err.(type) {
 			case *algos.EmptyPoolError:
 				return &InsufficientHidingSpotsError{InnerError:err}
@@ -139,22 +164,22 @@ func Dig(imgPath, outPath, patternPath string, algo algos.Algo, maxBitsPerChanne
 				return err
 			}
 		}
-		if r, err := outFile.Write(b[:n]); err != nil {
+		r, err := outFile.Write(b[:n])
+		if err != nil {
 			return err
-		} else {
-			readBytes += int64(r)
 		}
+		readBytes += int64(r)
 	}
 
 
-	fmt.Println("All done! c:")
+	printlnLvl(config.OutputLevel, OutputSteps, "All done! c:")
 
 	return nil
 }
 
 // Helper functions
 
-func decodeChunk(pos *func() (int64, error), info imgInfo, pixels *[]pixel, channelCount, maxBitsPerChannel uint8, buf *[]byte, n int, lsb bool) error {
+func decodeChunk(config DigConfig, pos *func() (int64, error), pixels *[]pixel, channelCount uint8, buf *[]byte, n int) error {
 	for i := 0; i < n; i++ {
 		for j := uint8(0); j < bitsPerByte; j++ {
 			for {
@@ -162,9 +187,9 @@ func decodeChunk(pos *func() (int64, error), info imgInfo, pixels *[]pixel, chan
 				if err != nil {
 					return err
 				}
-				p, c, b := bitAddrToPCB(addr, channelCount, maxBitsPerChannel)
+				p, c, b := bitAddrToPCB(addr, channelCount, config.MaxBitsPerChannel)
 
-				if debugOutput {
+				if config.OutputLevel == OutputDebug {
 					fmt.Printf("addr: %d, pixel: %d, channel: %d, bit: %d, RGBA: %v\n", addr, p, c, b, (*pixels)[p])
 				}
 
@@ -174,14 +199,14 @@ func decodeChunk(pos *func() (int64, error), info imgInfo, pixels *[]pixel, chan
 				}
 
 				bitPos := b
-				if !lsb {
+				if config.DecodeMsb {
 					bitPos = bitsPerByte - b - 1
 				}
 
 				readBit := binmani.ReadFrom((*pixels)[p][c], bitPos, 1)
 				(*buf)[i] = byte(binmani.WriteTo(uint16((*buf)[i]), bitsPerByte - j - 1, 1, readBit))
 
-				if debugOutput {
+				if config.OutputLevel == OutputDebug {
 					fmt.Printf("	Read %d\n", readBit)
 				}
 
@@ -190,7 +215,7 @@ func decodeChunk(pos *func() (int64, error), info imgInfo, pixels *[]pixel, chan
 		}
 	}
 
-	if debugOutput {
+	if config.OutputLevel == OutputDebug {
 		fmt.Println("Read chunk:", string(*buf))
 	}
 

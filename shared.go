@@ -11,7 +11,6 @@ import (
 
 const (
 	bitsPerByte           uint8  = 8
-	debugOutput           bool   = false
 	encodeChunkSize       uint8  = 32
 	encodeHeaderSize      uint8  = 32
 	encodeHeaderSeparator string = ";"
@@ -22,6 +21,17 @@ const (
 
 // Shared types
 
+// The levels of output supported by the package.
+type OutputLevel int
+
+const (
+	OutputNothing OutputLevel = iota // Output nothing at all to stdout.
+	OutputSteps   OutputLevel = iota // Output operation progress at each significant step of the process.
+	OutputInfo    OutputLevel = iota // Output operation progress at each significant step of the process, and include additional information.
+	OutputDebug   OutputLevel = iota // Output formatted debug information.
+)
+
+
 type pixel []uint16
 
 
@@ -31,11 +41,11 @@ type fmtInfo struct {
 	BitsPerChannel uint8
 }
 
-func (info *fmtInfo) BytesPerChannel() uint8 {
+func (info *fmtInfo) bytesPerChannel() uint8 {
 	return uint8(math.Ceil(float64(info.BitsPerChannel / bitsPerByte)))
 }
 
-func (info *fmtInfo) AlphaChannel() int8 {
+func (info *fmtInfo) alphaChannel() int8 {
 	switch info.Model {
 	case color.RGBAModel, color.RGBA64Model, color.NRGBAModel, color.NRGBA64Model:
 		return 3
@@ -46,8 +56,8 @@ func (info *fmtInfo) AlphaChannel() int8 {
 	}
 }
 
-func (info *fmtInfo) SupportsAlpha() bool {
-	return info.AlphaChannel() >= 0
+func (info *fmtInfo) supportsAlpha() bool {
+	return info.alphaChannel() >= 0
 }
 
 func (info *fmtInfo) String() string {
@@ -68,9 +78,9 @@ func (e unknownColourModelError) Error() string {
 	return "The colour model of the provided Image is unknown."
 }
 
-
+// Thrown when provided data is of an invalid format.
 type InvalidFormatError struct {
-	ErrorDesc string
+	ErrorDesc string // A description of the problem. If empty, a default message is used.
 }
 
 func (e InvalidFormatError) Error() string {
@@ -80,10 +90,10 @@ func (e InvalidFormatError) Error() string {
 	return "The provided data is of an invalid format."
 }
 
-
+// Thrown when the provided image does not have enough room to hide the provided file using the provided configuration.
 type InsufficientHidingSpotsError struct {
-	AdditionalInfo string
-	InnerError error
+	AdditionalInfo string // Additional information about the problem.
+	InnerError     error  // An inner error involved in the issue to provide more information.
 }
 
 func (e *InsufficientHidingSpotsError) Error() string {
@@ -100,6 +110,8 @@ func (e *InsufficientHidingSpotsError) Error() string {
 
 // Library methods
 
+// Returns the library version in a pretty string format.
+// Format: Max.Mid.Min
 func Version() string {
 	return fmt.Sprintf("%02d.%02d.%02d", VersionMax, VersionMid, VersionMin)
 }
@@ -109,7 +121,6 @@ func Version() string {
 func hashPatternFile(patternPath string) (int64, error) {
 	f, err := os.Open(patternPath)
 	if err != nil {
-		fmt.Printf("Unable to open the pattern file '%v': %v\n", patternPath, err.Error())
 		return -1, err
 	}
 
@@ -125,7 +136,6 @@ func hashPatternFile(patternPath string) (int64, error) {
 		}
 		if err != nil {
 			if err != io.EOF {
-				fmt.Println("An error occurred while reading the file.")
 				return -1, err
 			}
 			break
@@ -148,4 +158,10 @@ func posToXY(pos int64, w int) (x, y int) {
 	x = int(pos % int64(w))
 	y = int(pos / int64(w))
 	return
+}
+
+func printlnLvl(level, minLevel OutputLevel, val ...interface{}) {
+	if level >= minLevel {
+		fmt.Println(val...)
+	}
 }

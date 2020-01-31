@@ -1,3 +1,5 @@
+[![GoDoc](https://godoc.org/github.com/zedseven/steg?status.svg)](https://godoc.org/github.com/zedseven/steg)
+
 # steg
 A basic [steganography](https://en.wikipedia.org/wiki/Steganography) library/tool. Mostly just for practice with Go.
 

@@ -13,30 +13,30 @@ import (
 
 // Primary methods
 
-func loadImage(imgPath string) (pixels *[]pixel, info imgInfo, err error) {
+func loadImage(imgPath string, outputLevel OutputLevel) (pixels *[]pixel, info imgInfo, err error) {
 	imgFile, err := os.Open(imgPath)
 	if err != nil {
-		fmt.Println("Unable to open the image!", err.Error())
+		printlnLvl(outputLevel, OutputSteps, "Unable to open the image!", err.Error())
 		return nil, imgInfo{}, err
 	}
 
 	defer func() {
 		if err = imgFile.Close(); err != nil {
-			fmt.Printf("Error closing the file '%v': %v", imgPath, err.Error())
+			printlnLvl(outputLevel, OutputSteps, fmt.Sprintf("Error closing the file '%v': %v", imgPath, err.Error()))
 		}
 	}()
 
 	pixels, info, err = readPixels(imgFile)
 
 	if err != nil {
-		fmt.Println("The image couldn't be decoded:", err.Error())
+		printlnLvl(outputLevel, OutputSteps, "The image couldn't be decoded:", err.Error())
 		return nil, imgInfo{}, err
 	}
 
 	return
 }
 
-func writeImage(pixels *[]pixel, info imgInfo, outPath string) error {
+func writeImage(pixels *[]pixel, info imgInfo, outPath string, outputLevel OutputLevel) error {
 	var img image.Image
 
 	switch info.Format.Model {
@@ -77,19 +77,19 @@ func writeImage(pixels *[]pixel, info imgInfo, outPath string) error {
 		updatePixWithPixels(&simg.Pix, pixels, info.Format)
 		img = simg
 	default:
-		fmt.Println("Unknown image format.")
+		printlnLvl(outputLevel, OutputSteps, "Unknown image format.")
 		return unknownColourModelError{}
 	}
 
 	f, err := os.Create(outPath)
 	if err != nil {
-		fmt.Printf("There was an error creating the file '%v'.\n", outPath)
+		printlnLvl(outputLevel, OutputSteps, "There was an error creating the file '%v'.\n", outPath)
 		return err
 	}
 
 	defer func() {
 		if err = f.Close(); err != nil {
-			fmt.Printf("Error closing the file '%v': %v", outPath, err.Error())
+			printlnLvl(outputLevel, OutputSteps, "Error closing the file '%v': %v", outPath, err.Error())
 		}
 	}()
 
@@ -97,7 +97,8 @@ func writeImage(pixels *[]pixel, info imgInfo, outPath string) error {
 	encoder := png.Encoder{CompressionLevel:png.BestCompression}
 	err = encoder.Encode(f, img)
 	if err != nil {
-		fmt.Printf("There was an error encoding the image to the new file: %v\n", err.Error())
+		printlnLvl(outputLevel, OutputSteps, "There was an error encoding the image to the new file.")
+		return err
 	}
 
 	return nil
@@ -169,7 +170,7 @@ func imgPixToPixels(pix *[]uint8, info fmtInfo) *[]pixel {
 		for j := uint8(0); j < info.ChannelsPerPix; j++ {
 			// Image raw Pix arrays store multi-byte channel values in big-endian format
 			// across separate indices (https://golang.org/src/image/image.go?s=8222:8528#L380)
-			for k := uint8(0); k < info.BytesPerChannel(); k++ {
+			for k := uint8(0); k < info.bytesPerChannel(); k++ {
 				pixels[i][j] <<= bitsPerByte
 				pixels[i][j] += uint16((*pix)[i * int(info.ChannelsPerPix * bytesPerChannel) + int(j * bytesPerChannel)])
 			}
@@ -179,7 +180,7 @@ func imgPixToPixels(pix *[]uint8, info fmtInfo) *[]pixel {
 }
 
 func updatePixWithPixels(pix *[]uint8, pixels *[]pixel, info fmtInfo) {
-	bytes := info.BytesPerChannel()
+	bytes := info.bytesPerChannel()
 	for i := range *pixels {
 		for j := range (*pixels)[i] {
 			for k := uint8(0); k < bytes; k++ {

@@ -3,11 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/zedseven/steg/internal/algos"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/zedseven/steg"
+	"github.com/zedseven/steg/internal/algos"
 )
 
 // Program entry point
@@ -42,13 +43,17 @@ func main() {
 	bits := flagSet.Uint("bits", 1, "The number of bits to modify per channel (1-16), at a maximum (working inwards as determined by -msb)")
 	msb := flagSet.Bool("msb", false, "Whether to modify the most-significant bits instead - mostly for debugging")
 	encodeAlpha := flagSet.Bool("alpha", false, "Whether to touch the alpha (transparency) channel")
+	outputLevel := flagSet.String("level", "info", "The output level or verbosity to use")
 
-	flagSet.Parse(os.Args[2:])
+	if err := flagSet.Parse(os.Args[2:]); err != nil {
+		fmt.Println("There was an issue parsing the flags!", err.Error())
+		flagSet.PrintDefaults()
+	}
 
 	// Parse out which algorithm to use
 	var algo algos.Algo
 	algoTmp, err := strconv.ParseInt(*algoType, 10, 8)
-	if err != nil || algoTmp <= 0 || algoTmp > int64(algos.MaxAlgoVal) {
+	if err != nil || !algos.Algo(algoTmp).IsValid() {
 		algo = algos.StringToAlgo(*algoType)
 		if algo == algos.AlgoUnknown {
 			flagSet.PrintDefaults()
@@ -58,27 +63,68 @@ func main() {
 		algo = algos.Algo(algoTmp)
 	}
 
+	// Parse out which output level to use
+	var level steg.OutputLevel
+	levelTmp, err := strconv.ParseInt(*algoType, 10, 8)
+	if err != nil {
+		switch strings.ToLower(*outputLevel) {
+		case "nothing":
+			level = steg.OutputNothing
+		case "steps":
+			level = steg.OutputSteps
+		case "info":
+			level = steg.OutputInfo
+		case "debug":
+			level = steg.OutputDebug
+		default:
+			flagSet.PrintDefaults()
+			return
+		}
+	} else {
+		level = steg.OutputLevel(levelTmp)
+	}
+
 	// Run the appropriate command
 	switch os.Args[1] {
 	case "hide":
-		//TODO: Make some of the below values constants
-		if len(*imgPath) <= 0 || len(*filePath) <= 0 || len(*outPath) <= 0 || *bits <= 0 || *bits > 16 {
-			flagSet.PrintDefaults()
-			return
+		config := steg.HideConfig{
+			ImagePath:         *imgPath,
+			FilePath:          *filePath,
+			OutPath:           *outPath,
+			PatternPath:       *patternPath,
+			Algorithm:         algo,
+			MaxBitsPerChannel: uint8(*bits),
+			EncodeAlpha:       *encodeAlpha,
+			EncodeMsb:         *msb,
+			OutputLevel:       level,
 		}
-
-		if err := steg.Hide(*imgPath, *filePath, *outPath, *patternPath, algo, uint8(*bits), *encodeAlpha, !*msb); err != nil {
+		if err := steg.Hide(config); err != nil {
 			fmt.Println(err.Error())
+			switch err.(type) {
+			case *steg.InvalidFormatError:
+				flagSet.PrintDefaults()
+				return
+			}
 			return
 		}
 	case "dig":
-		if len(*imgPath) <= 0 || len(*outPath) <= 0 || *bits <= 0 || *bits > 16 {
-			flagSet.PrintDefaults()
-			return
+		config := steg.DigConfig{
+			ImagePath:         *imgPath,
+			OutPath:           *outPath,
+			PatternPath:       *patternPath,
+			Algorithm:         algo,
+			MaxBitsPerChannel: uint8(*bits),
+			EncodeAlpha:       *encodeAlpha,
+			DecodeMsb:         *msb,
+			OutputLevel:       level,
 		}
-
-		if err := steg.Dig(*imgPath, *outPath, *patternPath, algo, uint8(*bits), *encodeAlpha, !*msb); err != nil {
+		if err := steg.Dig(config); err != nil {
 			fmt.Println(err.Error())
+			switch err.(type) {
+			case *steg.InvalidFormatError:
+				flagSet.PrintDefaults()
+				return
+			}
 			return
 		}
 	default:
