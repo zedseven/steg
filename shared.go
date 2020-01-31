@@ -149,8 +149,8 @@ func hashPatternFile(patternPath string) (int64, error) {
 func bitAddrToPCB(addr int64, channels, bitsPerChannel uint8) (pix int64, channel, bit uint8) {
 	// Would normally floor here, but since all values are >= 0, integer division handles this for us
 	pix = addr / int64(channels * bitsPerChannel)
-	channel = uint8(addr / int64(bitsPerChannel)) % channels
-	bit = uint8(addr % int64(channels * bitsPerChannel)) % bitsPerChannel
+	channel = uint8((addr / int64(bitsPerChannel)) % int64(channels))
+	bit = uint8(addr % int64(bitsPerChannel))
 	return
 }
 
