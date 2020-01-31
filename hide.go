@@ -13,15 +13,25 @@ import (
 
 // HideConfig stores the configuration options for the Hide operation.
 type HideConfig struct {
-	ImagePath         string      // The path on disk to a supported image.
-	FilePath          string      // The path on disk to the file to hide.
-	OutPath           string      // The path on disk to write the output image.
-	PatternPath       string      // The path on disk to the pattern file used in encoding.
-	Algorithm         algos.Algo  // The algorithm to use in the operation.
-	MaxBitsPerChannel uint8       // The maximum number of bits to write per pixel channel - the minimum of this and the supported max of the image format is used.
-	EncodeAlpha       bool        // Whether or not to encode the alpha channel.
-	EncodeMsb         bool        // Whether to encode the most-significant bits instead - mostly for debugging.
-	OutputLevel       OutputLevel // The amount of output to provide.
+	// ImagePath is the path on disk to a supported image.
+	ImagePath         string
+	// FilePath is the path on disk to the file to hide.
+	FilePath          string
+	// OutPath is the path on disk to write the output image.
+	OutPath           string
+	// PatternPath is the path on disk to the pattern file used in encoding.
+	PatternPath       string
+	// Algorithm is the algorithm to use in the operation.
+	Algorithm         algos.Algo
+	// MaxBitsPerChannel is the maximum number of bits to write per pixel channel.
+	// The minimum of this and the supported max of the image format is used.
+	MaxBitsPerChannel uint8
+	// DecodeAlpha is whether or not to encode the alpha channel.
+	EncodeAlpha       bool
+	// EncodeMsb is whether to encode the most-significant bits instead - mostly for debugging.
+	EncodeMsb         bool
+	// OutputLevel is the amount of output to provide.
+	OutputLevel       OutputLevel
 }
 
 // Hide hides the binary data of a file in a provided image on disk, and saves the result to a new image.

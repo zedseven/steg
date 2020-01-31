@@ -114,7 +114,7 @@ func main() {
 			PatternPath:       *patternPath,
 			Algorithm:         algo,
 			MaxBitsPerChannel: uint8(*bits),
-			EncodeAlpha:       *encodeAlpha,
+			DecodeAlpha:       *encodeAlpha,
 			DecodeMsb:         *msb,
 			OutputLevel:       level,
 		}

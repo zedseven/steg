@@ -15,8 +15,11 @@ const (
 	encodeChunkSize       uint8  = 32
 	encodeHeaderSize      uint8  = 32
 	encodeHeaderSeparator string = ";"
+	// The primary version component of the package.
 	VersionMax            uint8  = 0
+	// The secondary version component of the package.
 	VersionMid            uint8  = 9
+	// The tertiary version component of the package.
 	VersionMin            uint8  = 0
 )
 
@@ -32,7 +35,7 @@ const (
 	OutputSteps   OutputLevel = iota
 	// OutputInfo tells the package to print operation progress at each significant step of the process, and include additional information.
 	OutputInfo    OutputLevel = iota
-	// OutputInfo tells the package to print formatted debug information in addition to everything else.
+	// OutputDebug tells the package to print formatted debug information in addition to everything else.
 	OutputDebug   OutputLevel = iota
 )
 
@@ -85,7 +88,8 @@ func (e unknownColourModelError) Error() string {
 
 // InvalidFormatError is thrown when provided data is of an invalid format.
 type InvalidFormatError struct {
-	ErrorDesc string // A description of the problem. If empty, a default message is used.
+	// A description of the problem. If empty, a default message is used.
+	ErrorDesc string
 }
 
 // Error returns a string that explains the InvalidFormatError.
@@ -99,8 +103,10 @@ func (e InvalidFormatError) Error() string {
 // InsufficientHidingSpotsError is thrown when the provided image does not have enough room to hide the provided file
 // using the provided configuration.
 type InsufficientHidingSpotsError struct {
-	AdditionalInfo string // Additional information about the problem.
-	InnerError     error  // An inner error involved in the issue to provide more information.
+	// Additional information about the problem.
+	AdditionalInfo string
+	// An inner error involved in the issue to provide more information.
+	InnerError     error
 }
 
 // Error returns a string that explains the InsufficientHidingSpotsError.
@@ -119,7 +125,7 @@ func (e *InsufficientHidingSpotsError) Error() string {
 // Library methods
 
 // Returns the library version in a pretty string format.
-// Format: Max.Mid.Min
+// Format (0-padded 2-digit): Max.Mid.Min
 func Version() string {
 	return fmt.Sprintf("%02d.%02d.%02d", VersionMax, VersionMid, VersionMin)
 }

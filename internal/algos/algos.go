@@ -46,6 +46,7 @@ const (
 
 // UnknownAlgoError is thrown when an unknown algorithm type is provided.
 type UnknownAlgoError struct {
+	// Algorithm is the algorithm provided that is unknown to the package.
 	Algorithm Algo
 }
 
