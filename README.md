@@ -1,7 +1,7 @@
 # steg
 [![GoDoc](https://godoc.org/github.com/zedseven/steg?status.svg)](https://godoc.org/github.com/zedseven/steg)
 
-A basic [steganography](https://en.wikipedia.org/wiki/Steganography) library/tool. Mostly just for practice with Go.
+A basic [steganography](https://en.wikipedia.org/wiki/Steganography) toolkit.
 
 It's currently a work-in-progress, and it's operation is still subject to change.
 
