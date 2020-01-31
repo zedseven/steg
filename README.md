@@ -3,17 +3,17 @@
 
 A basic [steganography](https://en.wikipedia.org/wiki/Steganography) library/tool. Mostly just for practice with Go.
 
-It's currently a work-in-progress, and as such contains **known bugs** (as well as at least a few unknown ones).
+It's currently a work-in-progress, and it's operation is still subject to change.
 
-## Library Usage
+## Using it as a library
 To include it in a project, simply use:
 ```go
 import "github.com/zedseven/steg"
 ```
 
-Then in code, simply use the `steg.Hide()` and `steg.Dig()` methods.
+Then in code, simply use the `steg.Hide()` and `steg.Dig()` methods. See [the GoDoc page](https://godoc.org/github.com/zedseven/steg) for documentation.
 
-## Executable Usage
+## Using it as a standalone tool
 
 To build and use the executable (from the project base directory):
 
@@ -21,7 +21,7 @@ To build and use the executable (from the project base directory):
 go install ./cmd/steg
 ```
 
-### Using the installed executable
+### Running the installed executable
 
 Hiding data in images:
 
