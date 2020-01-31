@@ -15,11 +15,11 @@ const (
 	encodeChunkSize       uint8  = 32
 	encodeHeaderSize      uint8  = 32
 	encodeHeaderSeparator string = ";"
-	// The primary version component of the package.
+	// VersionMax is the primary version component of the package.
 	VersionMax            uint8  = 0
-	// The secondary version component of the package.
+	// VersionMid is the secondary version component of the package.
 	VersionMid            uint8  = 9
-	// The tertiary version component of the package.
+	// VersionMin is the tertiary version component of the package.
 	VersionMin            uint8  = 0
 )
 
@@ -124,7 +124,7 @@ func (e *InsufficientHidingSpotsError) Error() string {
 
 // Library methods
 
-// Returns the library version in a pretty string format.
+// Version returns the library version in a pretty string format.
 // Format (0-padded 2-digit): Max.Mid.Min
 func Version() string {
 	return fmt.Sprintf("%02d.%02d.%02d", VersionMax, VersionMid, VersionMin)
