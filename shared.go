@@ -1,3 +1,4 @@
+// Package steg provides a complete steganography toolkit for storage and retrieval of data within images.
 package steg
 
 import (
@@ -21,14 +22,18 @@ const (
 
 // Shared types
 
-// The levels of output supported by the package.
+// OutputLevel is used to define the levels of output supported by the package.
 type OutputLevel int
 
 const (
-	OutputNothing OutputLevel = iota // Output nothing at all to stdout.
-	OutputSteps   OutputLevel = iota // Output operation progress at each significant step of the process.
-	OutputInfo    OutputLevel = iota // Output operation progress at each significant step of the process, and include additional information.
-	OutputDebug   OutputLevel = iota // Output formatted debug information.
+	// OutputNothing tells the package to be completely quiet.
+	OutputNothing OutputLevel = iota
+	// OutputSteps tells the package to print operation progress at each significant step of the process.
+	OutputSteps   OutputLevel = iota
+	// OutputInfo tells the package to print operation progress at each significant step of the process, and include additional information.
+	OutputInfo    OutputLevel = iota
+	// OutputInfo tells the package to print formatted debug information in addition to everything else.
+	OutputDebug   OutputLevel = iota
 )
 
 
@@ -78,11 +83,12 @@ func (e unknownColourModelError) Error() string {
 	return "The colour model of the provided Image is unknown."
 }
 
-// Thrown when provided data is of an invalid format.
+// InvalidFormatError is thrown when provided data is of an invalid format.
 type InvalidFormatError struct {
 	ErrorDesc string // A description of the problem. If empty, a default message is used.
 }
 
+// Error returns a string that explains the InvalidFormatError.
 func (e InvalidFormatError) Error() string {
 	if len(e.ErrorDesc) > 0 {
 		return e.ErrorDesc
@@ -90,12 +96,14 @@ func (e InvalidFormatError) Error() string {
 	return "The provided data is of an invalid format."
 }
 
-// Thrown when the provided image does not have enough room to hide the provided file using the provided configuration.
+// InsufficientHidingSpotsError is thrown when the provided image does not have enough room to hide the provided file
+// using the provided configuration.
 type InsufficientHidingSpotsError struct {
 	AdditionalInfo string // Additional information about the problem.
 	InnerError     error  // An inner error involved in the issue to provide more information.
 }
 
+// Error returns a string that explains the InsufficientHidingSpotsError.
 func (e *InsufficientHidingSpotsError) Error() string {
 	ret := "There is not enough space available to store the provided file within the provided image."
 	if len(e.AdditionalInfo) > 0 && e.InnerError != nil {

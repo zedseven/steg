@@ -11,7 +11,7 @@ import (
 	"github.com/zedseven/steg/pkg/binmani"
 )
 
-// Stores the configuration options for the Hide operation.
+// HideConfig stores the configuration options for the Hide operation.
 type HideConfig struct {
 	ImagePath         string      // The path on disk to a supported image.
 	FilePath          string      // The path on disk to the file to hide.
@@ -24,7 +24,7 @@ type HideConfig struct {
 	OutputLevel       OutputLevel // The amount of output to provide.
 }
 
-// Hides the binary data of a file in a provided image on disk, and saves the result to a new image.
+// Hide hides the binary data of a file in a provided image on disk, and saves the result to a new image.
 // It has the option of using one of several different encoding algorithms, depending on user needs.
 func Hide(config HideConfig) error {
 	// Input validation

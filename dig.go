@@ -13,7 +13,7 @@ import (
 
 // Types
 
-// Stores the configuration options for the Dig operation.
+// DigConfig stores the configuration options for the Dig operation.
 type DigConfig struct {
 	ImagePath         string      // The path on disk to a supported image.
 	OutPath           string      // The path on disk to write the output file.
@@ -25,16 +25,17 @@ type DigConfig struct {
 	OutputLevel       OutputLevel // The amount of output to provide.
 }
 
-// Thrown when the read header is garbage. Likely caused by a bad configuration or source image.
+// BadHeaderError is thrown when the read header is garbage. Likely caused by a bad configuration or source image.
 type BadHeaderError struct {}
 
+// Error returns a string that explains the BadHeaderError.
 func (e *BadHeaderError) Error() string {
 	return "The read header is not valid!"
 }
 
 // Primary method
 
-// Extracts the binary data of a file from a provided image on disk, and saves the result to a new file.
+// Dig extracts the binary data of a file from a provided image on disk, and saves the result to a new file.
 // The configuration must perfectly match the one used in encoding in order to extract successfully.
 func Dig(config DigConfig) error {
 	// Input validation
