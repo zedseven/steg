@@ -5,7 +5,7 @@ A full-featured [steganography](https://en.wikipedia.org/wiki/Steganography) too
 
 It's currently a work-in-progress, and it's operation is still subject to change.
 
-## Using it as a library
+## Using it as a package
 To include it in a project, simply use:
 ```go
 import "github.com/zedseven/steg"
