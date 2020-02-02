@@ -1,17 +1,17 @@
 # steg
 [![GoDoc](https://godoc.org/github.com/zedseven/steg?status.svg)](https://godoc.org/github.com/zedseven/steg)
 
-A basic [steganography](https://en.wikipedia.org/wiki/Steganography) toolkit.
+A full-featured [steganography](https://en.wikipedia.org/wiki/Steganography) toolkit.
 
 It's currently a work-in-progress, and it's operation is still subject to change.
 
-## Using it as a library
+## Using it as a package
 To include it in a project, simply use:
 ```go
 import "github.com/zedseven/steg"
 ```
 
-Then in code, simply use the `steg.Hide()` and `steg.Dig()` methods. See [the GoDoc page](https://godoc.org/github.com/zedseven/steg) for documentation.
+Then in code, simply use the `steg.Hide()` and `steg.Dig()` methods. See [the GoDoc manual](https://godoc.org/github.com/zedseven/steg) for documentation.
 
 ## Using it as a standalone tool
 
