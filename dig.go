@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zedseven/binmani"
 	"github.com/zedseven/steg/internal/algos"
 	"github.com/zedseven/steg/internal/util"
-	"github.com/zedseven/steg/pkg/binmani"
 )
 
 // Types

@@ -6,37 +6,41 @@ import (
 	"io"
 	"os"
 
+	"github.com/zedseven/bch"
+	"github.com/zedseven/binmani"
 	"github.com/zedseven/steg/internal/algos"
 	"github.com/zedseven/steg/internal/util"
-	"github.com/zedseven/steg/pkg/binmani"
 )
 
 // HideConfig stores the configuration options for the Hide operation.
 type HideConfig struct {
 	// ImagePath is the path on disk to a supported image.
-	ImagePath         string
+	ImagePath            string
 	// FilePath is the path on disk to the file to hide.
-	FilePath          string
+	FilePath             string
 	// OutPath is the path on disk to write the output image.
-	OutPath           string
+	OutPath              string
 	// PatternPath is the path on disk to the pattern file used in encoding.
-	PatternPath       string
+	PatternPath          string
 	// Algorithm is the algorithm to use in the operation.
-	Algorithm         algos.Algo
+	Algorithm            algos.Algo
+	// MaxCorrectableErrors is the number of bit errors to be able to correct for per file chunk. Setting it to 0
+	// disables bit ECC.
+	MaxCorrectableErrors uint8
 	// MaxBitsPerChannel is the maximum number of bits to write per pixel channel.
 	// The minimum of this and the supported max of the image format is used.
-	MaxBitsPerChannel uint8
+	MaxBitsPerChannel    uint8
 	// DecodeAlpha is whether or not to encode the alpha channel.
-	EncodeAlpha       bool
+	EncodeAlpha          bool
 	// EncodeMsb is whether to encode the most-significant bits instead - mostly for debugging.
-	EncodeMsb         bool
+	EncodeMsb            bool
 	// OutputLevel is the amount of output to provide.
-	OutputLevel       OutputLevel
+	OutputLevel          OutputLevel
 }
 
 // Hide hides the binary data of a file in a provided image on disk, and saves the result to a new image.
 // It has the option of using one of several different encoding algorithms, depending on user needs.
-func Hide(config HideConfig) error {
+func Hide(config *HideConfig) error {
 	// Input validation
 	if len(config.ImagePath) <= 0 {
 		return &InvalidFormatError{"ImagePath is empty."}
@@ -52,6 +56,9 @@ func Hide(config HideConfig) error {
 	}
 	if !config.Algorithm.IsValid() {
 		return &InvalidFormatError{"Algorithm is invalid."}
+	}
+	if config.MaxCorrectableErrors < 0 {
+		return &InvalidFormatError{"MaxCorrectableErrors must be non-negative."}
 	}
 	if config.MaxBitsPerChannel < 0 || config.MaxBitsPerChannel > 16 {
 		return &InvalidFormatError{fmt.Sprintf("MaxBitsPerChannel is outside the allowed range of 0-16: Provided %d.", config.MaxBitsPerChannel)}
@@ -140,9 +147,23 @@ func Hide(config HideConfig) error {
 			"and the maximum possible with this configuration is %d, there is no way the input file will fit.", bitsToWrite, maxWritableBits)}
 	}
 
+	var encodeConfig *bch.EncodingConfig = nil
+	if config.MaxCorrectableErrors > 0 {
+		printlnLvl(config.OutputLevel, OutputSteps, "Setting up data ECC...")
+		codeLength, err := bch.TotalBitsForConfig(int(encodeChunkSize * bitsPerByte), int(config.MaxCorrectableErrors))
+		if err != nil {
+			return err
+		}
+
+		encodeConfig, err = bch.CreateConfig(codeLength, int(config.MaxCorrectableErrors))
+		if err != nil {
+			return err
+		}
+	}
+
 	printlnLvl(config.OutputLevel, OutputDebug, "Encoding header:", string(b[0:]))
 
-	if err = encodeChunk(config, info, &f, pixels, channelsPerPix, &b, int(encodeHeaderSize)); err != nil {
+	if err = encodeChunk(config, encodeConfig, info, &f, pixels, channelsPerPix, &b, int(encodeHeaderSize)); err != nil {
 		switch err.(type) {
 		case *algos.EmptyPoolError:
 			return &InsufficientHidingSpotsError{InnerError:err}
@@ -163,7 +184,7 @@ func Hide(config HideConfig) error {
 	for {
 		n, err := r.Read(b)
 		if n > 0 {
-			if err = encodeChunk(config, info, &f, pixels, channelsPerPix, &b, n); err != nil {
+			if err = encodeChunk(config, encodeConfig, info, &f, pixels, channelsPerPix, &b, n); err != nil {
 				switch err.(type) {
 				case *algos.EmptyPoolError:
 					return &InsufficientHidingSpotsError{InnerError:err}
@@ -196,9 +217,30 @@ func Hide(config HideConfig) error {
 
 // Helper functions
 
-func encodeChunk(config HideConfig, info imgInfo, pos *func() (int64, error), pixels *[]pixel, channelCount uint8, buf *[]byte, n int) error {
+func encodeChunk(config *HideConfig, econfig *bch.EncodingConfig, info imgInfo, pos *func() (int64, error), pixels *[]pixel, channelCount uint8, buf *[]byte, n int) error {
 	supportsAlpha := info.Format.supportsAlpha()
 	alphaChannel := info.Format.alphaChannel()
+
+	var writeData []byte
+	if econfig != nil {
+		if econfig.StorageBits != len(*buf) * int(bitsPerByte) {
+			panic("Provided with a mismatched bch.EncodingConfig for the data to be encoded!")
+		}
+
+		fmt.Printf("This is a %v.\n", econfig)
+		dataBits := binmani.BytesToBits(buf)
+		fmt.Printf("Original data: %v\n", dataBits)
+		encodedBits, err := bch.EncodeWithConfig(econfig, dataBits)
+		fmt.Printf("Encoded data:  %v\n", encodedBits)
+		if err != nil {
+			return err
+		}
+		writeData = *binmani.BitsToBytes(&encodedBits)
+	} else {
+		writeData = (*buf)[:n]
+	}
+
+	n = len(writeData)
 	for i := 0; i < n; i++ {
 		for j := uint8(0); j < bitsPerByte; j++ {
 			writeBit := binmani.ReadFrom(uint16((*buf)[i]), bitsPerByte - j - 1, 1)
