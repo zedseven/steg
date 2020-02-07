@@ -43,6 +43,7 @@ func main() {
 	bits := flagSet.Uint("bits", 1, "The number of bits to modify per channel (1-16), at a maximum (working inwards as determined by -msb)")
 	msb := flagSet.Bool("msb", false, "Whether to modify the most-significant bits instead - mostly for debugging")
 	encodeAlpha := flagSet.Bool("alpha", false, "Whether to touch the alpha (transparency) channel")
+	maxCorrectableErrors := flagSet.Uint("errors", 0, "The maximum number of correctable errors to allow for per file chunk")
 	outputLevel := flagSet.String("level", "info", "The output level or verbosity to use")
 
 	if err := flagSet.Parse(os.Args[2:]); err != nil {
@@ -88,17 +89,17 @@ func main() {
 	switch os.Args[1] {
 	case "hide":
 		config := steg.HideConfig{
-			ImagePath:         *imgPath,
-			FilePath:          *filePath,
-			OutPath:           *outPath,
-			PatternPath:       *patternPath,
-			Algorithm:         algo,
-			MaxBitsPerChannel: uint8(*bits),
-			EncodeAlpha:       *encodeAlpha,
-			EncodeMsb:         *msb,
-			OutputLevel:       level,
+			ImagePath:            *imgPath,
+			FilePath:             *filePath,
+			OutPath:              *outPath,
+			PatternPath:          *patternPath,
+			Algorithm:            algo,
+			MaxCorrectableErrors: uint8(*maxCorrectableErrors),
+			MaxBitsPerChannel:    uint8(*bits),
+			EncodeAlpha:          *encodeAlpha,
+			EncodeMsb:            *msb,
 		}
-		if err := steg.Hide(config); err != nil {
+		if err := steg.Hide(&config, level); err != nil {
 			fmt.Println(err.Error())
 			switch err.(type) {
 			case *steg.InvalidFormatError:
@@ -113,12 +114,12 @@ func main() {
 			OutPath:           *outPath,
 			PatternPath:       *patternPath,
 			Algorithm:         algo,
+			MaxCorrectableErrors: uint8(*maxCorrectableErrors),
 			MaxBitsPerChannel: uint8(*bits),
 			DecodeAlpha:       *encodeAlpha,
 			DecodeMsb:         *msb,
-			OutputLevel:       level,
 		}
-		if err := steg.Dig(config); err != nil {
+		if err := steg.Dig(&config, level); err != nil {
 			fmt.Println(err.Error())
 			switch err.(type) {
 			case *steg.InvalidFormatError:

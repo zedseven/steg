@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	_ "image/gif"
+	_ "image/jpeg"
 	"image/png"
 	"io"
 	"os"
 
-	"github.com/zedseven/steg/pkg/binmani"
+	"github.com/zedseven/binmani"
 )
 
 // Primary methods
