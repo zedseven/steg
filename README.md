@@ -1,5 +1,5 @@
 # steg
-[![GoDoc](https://godoc.org/github.com/zedseven/steg?status.svg)](https://godoc.org/github.com/zedseven/steg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![GoDoc](https://godoc.org/github.com/zedseven/steg?status.svg)](https://godoc.org/github.com/zedseven/steg)
 
 A full-featured [steganography](https://en.wikipedia.org/wiki/Steganography) toolkit.
 
